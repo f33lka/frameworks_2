@@ -1,0 +1,663 @@
+openapi: 3.0.3
+info:
+  title: СистемаКонтроля API
+  description: |
+    Микросервисная система управления задачами для строительных объектов.
+
+    Система предоставляет:
+    - Управление пользователями (регистрация, авторизация, профиль)
+    - Управление заказами (создание, просмотр, обновление статуса)
+    - Единый вход через API Gateway
+    - Логирование и трассировка запросов
+
+    Все защищённые эндпоинты требуют JWT токен в заголовке Authorization.
+  version: 1.0.0
+  contact:
+    name: ООО «СистемаКонтроля»
+
+servers:
+  - url: http://localhost:3000
+    description: Development (через API Gateway)
+  - url: http://localhost:3001
+    description: Users Service (прямое подключение)
+  - url: http://localhost:3002
+    description: Orders Service (прямое подключение)
+
+tags:
+  - name: Auth
+    description: Операции авторизации и регистрации
+  - name: Users
+    description: Управление пользователями
+  - name: Orders
+    description: Управление заказами
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT токен для аутентификации
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: Invalid input data
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        name:
+          type: string
+          example: Иван Иванов
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [user, manager, admin]
+          example: [user]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 660e8400-e29b-41d4-a716-446655440000
+        userId:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              productName:
+                type: string
+                example: Цемент М500
+              quantity:
+                type: integer
+                example: 10
+              price:
+                type: number
+                example: 500.00
+        totalAmount:
+          type: number
+          example: 5000.00
+        status:
+          type: string
+          enum: [created, in_progress, completed, cancelled]
+          example: created
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total:
+          type: integer
+          example: 50
+        totalPages:
+          type: integer
+          example: 5
+        hasNext:
+          type: boolean
+          example: true
+        hasPrev:
+          type: boolean
+          example: false
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Проверка здоровья сервиса
+      description: Возвращает статус работы сервиса
+      responses:
+        '200':
+          description: Сервис работает нормально
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      service:
+                        type: string
+                        example: api-gateway
+                      status:
+                        type: string
+                        example: healthy
+                      timestamp:
+                        type: string
+                        format: date-time
+
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Регистрация нового пользователя
+      description: Создаёт нового пользователя в системе
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - name
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  minLength: 8
+                  example: securePassword123
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                  example: Иван Иванов
+      responses:
+        '201':
+          description: Пользователь успешно зарегистрирован
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Ошибка валидации или пользователь уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Вход в систему
+      description: Аутентификация пользователя и получение JWT токена
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  example: securePassword123
+      responses:
+        '200':
+          description: Успешная аутентификация
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                      user:
+                        $ref: '#/components/schemas/User'
+        '401':
+          description: Неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/users/profile:
+    get:
+      tags:
+        - Users
+      summary: Получить профиль текущего пользователя
+      description: Возвращает данные профиля авторизованного пользователя
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Профиль пользователя
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - Users
+      summary: Обновить профиль
+      description: Обновляет данные профиля текущего пользователя
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                  example: Пётр Петров
+                email:
+                  type: string
+                  format: email
+                  example: newmail@example.com
+      responses:
+        '200':
+          description: Профиль успешно обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/users/list:
+    get:
+      tags:
+        - Users
+      summary: Список пользователей (только для администраторов)
+      description: Возвращает список всех пользователей с пагинацией
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Номер страницы
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Количество записей на странице
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [user, manager, admin]
+          description: Фильтр по роли
+      responses:
+        '200':
+          description: Список пользователей
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      users:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/User'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '403':
+          description: Недостаточно прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/orders:
+    post:
+      tags:
+        - Orders
+      summary: Создать новый заказ
+      description: Создаёт новый заказ для текущего пользователя
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - items
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required:
+                      - productName
+                      - quantity
+                      - price
+                    properties:
+                      productName:
+                        type: string
+                        example: Кирпич красный
+                      quantity:
+                        type: integer
+                        minimum: 1
+                        example: 1000
+                      price:
+                        type: number
+                        minimum: 0
+                        example: 15.50
+      responses:
+        '201':
+          description: Заказ успешно создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '400':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Orders
+      summary: Список заказов
+      description: |
+        Возвращает список заказов:
+        - Для обычных пользователей - только их заказы
+        - Для менеджеров и администраторов - все заказы
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [created, in_progress, completed, cancelled]
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [created_at, total_amount, status]
+            default: created_at
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Список заказов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      orders:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Order'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+
+  /api/v1/orders/{id}:
+    get:
+      tags:
+        - Orders
+      summary: Получить заказ по ID
+      description: Возвращает детали конкретного заказа
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Детали заказа
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '403':
+          description: Недостаточно прав для просмотра заказа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Заказ не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Orders
+      summary: Отменить заказ
+      description: |
+        Отменяет собственный заказ пользователя.
+        Нельзя отменить заказ со статусом completed или cancelled.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Заказ успешно отменён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '400':
+          description: Невозможно отменить заказ в текущем статусе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Можно отменить только собственные заказы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/orders/{id}/status:
+    put:
+      tags:
+        - Orders
+      summary: Обновить статус заказа
+      description: |
+        Изменяет статус заказа.
+        - Владелец может менять статус своих заказов
+        - Менеджеры и администраторы могут менять статус любых заказов
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [created, in_progress, completed, cancelled]
+                  example: in_progress
+      responses:
+        '200':
+          description: Статус успешно обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '403':
+          description: Недостаточно прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Заказ не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

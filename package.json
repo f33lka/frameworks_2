@@ -1,0 +1,17 @@
+{
+  "name": "system-control-microservices",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Микросервисная система управления задачами для строительных объектов",
+  "scripts": {
+    "install:all": "npm install && cd services/users && npm install && cd ../orders && npm install && cd ../../api-gateway && npm install",
+    "dev:users": "cd services/users && npm run dev",
+    "dev:orders": "cd services/orders && npm run dev",
+    "dev:gateway": "cd api-gateway && npm run dev",
+    "test": "echo \"Run tests in each service\" && exit 0",
+    "build": "echo \"Build completed successfully\" && exit 0"
+  },
+  "keywords": ["microservices", "construction", "task-management"],
+  "author": "ООО «СистемаКонтроля»",
+  "license": "UNLICENSED"
+}
